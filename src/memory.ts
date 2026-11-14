@@ -3,11 +3,12 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-// Everything long-term: conversations, turns (question + answer + sources),
-// and claims (checkable facts filed per turn by the extractor at the bottom).
+// Everything long-term: conversations, turns (question + answer + sources +
+// what went into the model), and what the extractor at the bottom files per
+// turn: claims (checkable facts) and user_facts (what they said about themselves).
 export type Source = { n: number; url: string; title: string; fetched_at: string };
-export type Claim = { entity: string; fact: string; value: string; source_url: string };
-export type Complete = (
+type Claim = { entity: string; fact: string; value: string; source_url: string };
+type Complete = (
   messages: { role: 'system' | 'user'; content: string }[],
   schema: object
 ) => Promise<any>;
@@ -32,7 +33,8 @@ CREATE TABLE IF NOT EXISTS turns (
   tool_calls INTEGER,
   pages_opened INTEGER,
   ms INTEGER,
-  error TEXT
+  error TEXT,
+  model_input TEXT
 );
 CREATE TABLE IF NOT EXISTS claims (
   id INTEGER PRIMARY KEY,
@@ -57,7 +59,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS turns_fts USING fts5(
 );`;
 
 // ---------------------------------------------------------------------------
-// Date and timezone formatting
+// Opening the database
 // ---------------------------------------------------------------------------
 
 export function openDb(path: string): DatabaseSync {
@@ -89,6 +91,7 @@ const ADDED_COLUMNS: Record<string, Record<string, string>> = {
     ms: 'INTEGER',
     error: 'TEXT',
     summary: 'TEXT',
+    model_input: 'TEXT',
   },
   claims: { superseded_by: 'INTEGER' },
 };
@@ -100,6 +103,10 @@ export function domain(url: string): string {
     return url;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Date and timezone formatting
+// ---------------------------------------------------------------------------
 
 function isValidTz(tz: unknown): tz is string {
   if (typeof tz !== 'string' || !tz) return false;
@@ -207,7 +214,7 @@ export function startTurn(
   return { conversationId, turnId: Number(r.lastInsertRowid) };
 }
 
-export type TurnStats = {
+type TurnStats = {
   effort: string;
   toolCalls: number;
   pagesOpened: number;
@@ -236,6 +243,25 @@ export function finishTurn(
     turnId
   );
   indexTurn(db, turnId);
+}
+
+// What went into the model for one turn, exactly as sent: the system prompt,
+// the prompt (this chat, the date strip, recall, their message), and every
+// tool call with the text it returned. Kept so the UI can show it later.
+export type TurnContext = {
+  system: string;
+  prompt: string;
+  tools: { name: string; args: Record<string, unknown>; result: string }[];
+};
+
+export function saveContext(db: DatabaseSync, turnId: number, context: TurnContext): void {
+  db.prepare('UPDATE turns SET model_input = ? WHERE id = ?').run(JSON.stringify(context), turnId);
+}
+
+export function turnContext(db: DatabaseSync, turnId: number): TurnContext | null {
+  const row = db.prepare('SELECT model_input FROM turns WHERE id = ?').get(turnId) as
+    { model_input: string | null } | undefined;
+  return row?.model_input ? (JSON.parse(row.model_input) as TurnContext) : null;
 }
 
 export const stripCitations = (text: string) => text.replace(/\s*\[\d+\]/g, '');

@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS turns (
   topic TEXT,                      -- null until extraction lands
   entities TEXT,                   -- JSON string[], null until extraction lands
   summary TEXT,                    -- one line naming what the reply listed and picked
-  effort TEXT, tool_calls INTEGER, pages_opened INTEGER, ms INTEGER, error TEXT
+  effort TEXT, tool_calls INTEGER, pages_opened INTEGER, ms INTEGER, error TEXT,
+  model_input TEXT                 -- JSON {system, prompt, tools: [{name, args, result}]}, exactly as sent
 );
 CREATE TABLE IF NOT EXISTS claims (
   id INTEGER PRIMARY KEY,
@@ -177,6 +178,7 @@ type AgentEvent =
 Other routes:
 - `GET /api/conversations`: list of conversations.
 - `GET /api/conversations/:id`: its turns, so the UI can render history.
+- `GET /api/turns/:id/context`: the turn's `model_input`, or 404 if it wasn't recorded.
 - `GET /`: serves the HTML.
 
 ## Prompt
@@ -231,6 +233,7 @@ Timezone: everything is stored in UTC and rendered in the request's `tz`. If `tz
 - The answer streams in as markdown. Keep the renderer tiny and inline: paragraphs, lists, bold, links, code.
 - `[n]` renders as a small clickable superscript. A sources row under the answer shows favicon, domain and title.
 - Sends `tz` from `Intl.DateTimeFormat().resolvedOptions().timeZone`.
+- A Context button under each answer opens a right-hand panel with that turn's `model_input`: the system prompt, the prompt split at the headings the app writes, and each tool call with its arguments and result, each collapsible with its size.
 - No auth. The server listens on 127.0.0.1 only, and `POST /api/chat` requires `content-type: application/json`, so another site open in the browser can't trigger turns without a CORS preflight, which the server never answers.
 
 ## Tests (`node:test`, no network)

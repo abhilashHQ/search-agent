@@ -77,6 +77,10 @@ Type a question. While it works you see what it's doing: what it searched, how m
 
 ![The live trail: news searches since Monday for each of the five tools, and the five pricing pages it cited on Monday requested with a live crawl](docs/img/crm-working.png)
 
+Every answer has a **Context** button. It opens a panel on the right with exactly what went into the model for that turn: the system prompt, the message split into its parts (earlier in this chat, the date strip, what you've told it about yourself, past chats, your message), and every `web_search` call with its arguments and the text that came back. It's saved with the turn, so reopening an old chat shows it too. Turns asked before this was added have none.
+
+![The context panel for a follow-up: the system prompt, each part of the message with its size, and the one web_search call with its arguments and what it returned](docs/img/context.png)
+
 The effort toggle (low, medium, high) controls how much it checks, not how much it talks:
 
 | Effort | Tool calls | What it does |

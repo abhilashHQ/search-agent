@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { listConversations, conversationTurns } from './memory.ts';
+import { listConversations, conversationTurns, turnContext } from './memory.ts';
 import { handleMcp } from './llm.ts';
 import { runTurn } from './agent.ts';
 import { env, setup } from './setup.ts';
@@ -73,6 +73,7 @@ async function chat(req: IncomingMessage, res: ServerResponse) {
 //   POST /api/chat               -> chat, SSE stream
 //   GET  /api/conversations      -> conversation list
 //   GET  /api/conversations/:id  -> turns of one conversation
+//   GET  /api/turns/:id/context  -> what went into the model for one turn
 //   GET  /                       -> the single-page app
 // ---------------------------------------------------------------------------
 createServer(async (req, res) => {
@@ -94,6 +95,11 @@ createServer(async (req, res) => {
     const match = url.pathname.match(/^\/api\/conversations\/([\w-]{1,64})$/);
     if (req.method === 'GET' && match) {
       return json(res, 200, conversationTurns(db, match[1]));
+    }
+    const turn = url.pathname.match(/^\/api\/turns\/(\d{1,12})\/context$/);
+    if (req.method === 'GET' && turn) {
+      const context = turnContext(db, Number(turn[1]));
+      return context ? json(res, 200, context) : json(res, 404, { error: 'Not recorded' });
     }
     if (req.method === 'GET' && url.pathname === '/') {
       return res

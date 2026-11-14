@@ -4,7 +4,7 @@ import { domain, type Source } from './memory.ts';
 // seen, numbered in the order first seen.
 export type Book = Map<string, Source & { opened: boolean; text: string }>;
 
-export type ToolResult = { text: string; ok: number; failed: number; domains: string[] };
+type ToolResult = { text: string; ok: number; failed: number; domains: string[] };
 
 export type Tools = {
   webSearch(args: { queries: string[]; since?: string }, book: Book): Promise<ToolResult>;
@@ -142,10 +142,9 @@ export function makeExaTools(key: string, clock = () => new Date()): Tools {
         }
         const blocks: string[] = [];
         for (const hit of r.value.results ?? []) {
-          const known = book.get(hit.url);
           if (seen.has(hit.url)) {
             // same URL across queries: first excerpt wins, later queries point back
-            if (known) blocks.push(`[${known.n}] (same page as above)`);
+            blocks.push(`[${book.get(hit.url)!.n}] (same page as above)`);
             continue;
           }
           seen.add(hit.url);

@@ -21,7 +21,7 @@ browser ──SSE── server.ts ── agent.ts ──spawn── claude -p
 - *Reading.* Every message opens with the local time and the last 14 days written out with weekdays, so "last Tuesday" is a lookup. Then: what they've said about themselves; this chat, with older replies as their summaries and the latest whole with its pages; and past chats, found with SQLite FTS5 over the question, reply, summary, labels and surrounding chat, ranked by BM25 fused with recency, with a named day as a third ranked list. Usually that's at most three dated one-liners. When the message points back ("you said", "on Monday", or one past exchange clearly covers it), the matching exchanges come in full: the reply, its pages with read dates, the saved values, and the log of every question.
 - *Checking.* For "is it still right?" the model re-opens the stored pages, live, and gives every old value one verdict: unchanged, changed (old to new, cited), or couldn't verify.
 
-**Cleanup.** Text streamed before a tool call is narration, so it moves into the thinking trail. Citations are normalized to `[n]`, and any citation that doesn't match a source from this turn is dropped.
+**Cleanup and inspection.** Text streamed before a tool call is narration, so it moves into the thinking trail. Citations are normalized to `[n]`, and any citation that doesn't match a source from this turn is dropped. Each turn also saves exactly what went into the model (system prompt, prompt, every tool call and the text it returned), and the UI's Context panel shows it, so any answer can be traced back to what the model actually saw.
 
 ## Why I built it this way
 

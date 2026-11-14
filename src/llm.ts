@@ -143,7 +143,6 @@ export function makeClaude(cfg: {
   configDir: string;
   auth: { oauthToken?: string; apiKey?: string };
   mcpBase: string;
-  timeoutMs?: number;
 }): Model {
   const workdir = join(tmpdir(), 'meowgle');
   mkdirSync(workdir, { recursive: true });
@@ -185,7 +184,7 @@ export function makeClaude(cfg: {
       windowsHide: true,
       signal: opts.signal,
     });
-    const timer = setTimeout(() => p.kill(), opts.timeoutMs ?? cfg.timeoutMs ?? 120_000);
+    const timer = setTimeout(() => p.kill(), opts.timeoutMs ?? 120_000);
     let stderr = '';
     p.stderr.on('data', (d) => (stderr += d));
     const exited = new Promise<number | null>((r) => p.on('close', r));

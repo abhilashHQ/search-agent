@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { setImmediate as tick } from 'node:timers/promises';
 import { runTurn, cleanAnswer, type AgentEvent } from '../src/agent.ts';
 import { SYSTEM_PROMPT, refersToPast } from '../src/prompt.ts';
-import { openDb, startTurn, finishTurn } from '../src/memory.ts';
-import type { Message, Model } from '../src/llm.ts';
+import { openDb, startTurn, finishTurn, turnContext } from '../src/memory.ts';
+import { flatten, type Message, type Model } from '../src/llm.ts';
 import type { Book, Tools } from '../src/tools.ts';
 
-test('cleanAnswer: gpt-oss markers become [n], unknown and repeated ones go, odd unicode is normalized', () => {
+test('cleanAnswer: other citation syntaxes become [n], unknown and repeated ones go, odd unicode is normalized', () => {
   const raw = 'A 【3†L1-L2】​ b [2†source] c [9]. d [2][2]【2†x】 e %, non‑breaking';
   assert.equal(cleanAnswer(raw, new Set([2, 3])), 'A [3] b [2] c. d [2] e %, non-breaking');
   assert.equal(
@@ -354,6 +354,39 @@ test('runTurn: tool calls past the budget are refused and effort reaches the mod
     /Effort is medium[\s\S]*You have 6 tool calls at most/
   );
   assert.equal(events.at(-1)?.type, 'done');
+});
+
+test('runTurn: saves exactly what went into the model, refused tool calls included', async () => {
+  const db = openDb(':memory:');
+  const { model, runs } = fakeModel(
+    [
+      ...Array.from({ length: 4 }, () => call('web_search', { queries: ['neon price'] })),
+      text('Neon is $19 [2].'),
+    ],
+    { topic: 't', entities: [], claims: [] }
+  );
+  let turnId = 0;
+  for await (const e of runTurn(
+    { db, model, tools: fakeTools().tools },
+    { message: 'neon price?', tz: 'UTC' }
+  ))
+    if (e.type === 'start') turnId = e.turnId;
+
+  const ctx = turnContext(db, turnId)!;
+  assert.deepEqual(ctx.system, flatten(runs[0].messages).system);
+  assert.deepEqual(ctx.prompt, flatten(runs[0].messages).prompt);
+  assert.match(ctx.prompt, /# Their message\nneon price\?/);
+  assert.deepEqual(
+    ctx.tools.map((t) => t.result),
+    runs[0].toolResults
+  );
+  assert.deepEqual(ctx.tools[0], {
+    name: 'web_search',
+    args: { queries: ['neon price'] },
+    result: runs[0].toolResults[0],
+  });
+  assert.match(ctx.tools[3].result, /^No more lookups this turn/);
+  assert.equal(turnContext(db, turnId + 1), null);
 });
 
 test('runTurn: one web_search call can search and read pages in parallel, and needs one of them', async () => {

@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { CallTool, Message, Model, ModelEvent } from './llm.ts';
+import { flatten, type CallTool, type Message, type Model, type ModelEvent } from './llm.ts';
 import type { Book, Tools } from './tools.ts';
 import { EFFORT, buildMessages, refersToPast, toolFooter, type Effort } from './prompt.ts';
 import {
@@ -9,12 +9,14 @@ import {
   recentMessages,
   renderAboutThem,
   resolveTz,
+  saveContext,
   startTurn,
   type Source,
+  type TurnContext,
 } from './memory.ts';
 import { recallPast } from './recall.ts';
 
-export type Deps = { db: DatabaseSync; model: Model; tools: Tools; now?: () => Date };
+type Deps = { db: DatabaseSync; model: Model; tools: Tools; now?: () => Date };
 
 // A turn gets at most EFFORT[effort].toolCalls tool calls. Past that, tools
 // answer with a note telling the model to wrap up.
@@ -225,6 +227,7 @@ export async function* runTurn(
   });
 
   // -- 3. the model run, with tool calls routed back here
+  const context: TurnContext = { ...flatten(messages), tools: [] };
   const book: Book = new Map(); // every source seen this turn, numbered
   const known = knownUrls(db);
   const valid = () => new Set([...book.values()].map((s) => s.n));
@@ -234,13 +237,18 @@ export async function* runTurn(
   let toolCalls = 0;
   let pagesOpened = 0;
   const callTool: CallTool = async (name, args) => {
-    if (++toolCalls > budget.toolCalls) return OUT_OF_TOOLS;
+    if (++toolCalls > budget.toolCalls) {
+      context.tools.push({ name, args, result: OUT_OF_TOOLS });
+      return OUT_OF_TOOLS;
+    }
     const run = runTool(name, args, deps, book, known, budget.pageChars);
     for (;;) {
       const step = await run.next();
       if (step.done) {
         const left = budget.toolCalls - toolCalls;
-        return `${step.value}\n\n${toolFooter(now, tz, left)}`;
+        const result = `${step.value}\n\n${toolFooter(now, tz, left)}`;
+        context.tools.push({ name, args, result });
+        return result;
       }
       if (step.value.type === 'open_done') pagesOpened += step.value.ok;
       q.push({ event: step.value });
@@ -310,6 +318,7 @@ export async function* runTurn(
       ms: Date.now() - started,
       error: failure,
     });
+    saveContext(db, turnId, context);
   }
 
   // -- 4. send what was not streamed yet, list sources, report failures

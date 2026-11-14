@@ -101,7 +101,7 @@ type Row = {
   sources: string;
 };
 
-export type Hit = Row & { inWindow: boolean; lexical: number | null; cover: number; score: number };
+type Hit = Row & { inWindow: boolean; lexical: number | null; cover: number; score: number };
 
 // A crude stem, enough to tell whether a past exchange covers a word.
 const stem = (w: string) => (w.length > 3 ? w.replace(/(ing|ed|es|s)$/, '') : w);
@@ -110,7 +110,7 @@ const RRF_K = 60;
 
 // Past exchanges from other chats that could be what the message is about.
 // Candidates are the top BM25 matches, every turn on a day the message names,
-// and the five most recent turns. Each gets a reciprocal-rank score from the
+// and the six most recent turns. Each gets a reciprocal-rank score from the
 // BM25 list and from recency, and a named day counts as if it ranked first in
 // a third list, so it lifts a turn without excluding the rest. `cover` is the
 // share of the message's subject words the exchange contains.
@@ -235,7 +235,7 @@ export function recallPast(
     );
   }
 
-  let picked = days ? hits.filter((h) => h.inWindow).slice(0, 3) : [];
+  let picked = hits.filter((h) => h.inWindow).slice(0, 3);
   if (!picked.length && clearMatch) picked = [best];
   if (!picked.length && top) {
     const runnerUp = hits.slice(1).find((h) => h.lexical !== null && h.cover >= 0.5);
