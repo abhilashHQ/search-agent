@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { delimiter, join } from 'node:path';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { openDb, listConversations, conversationTurns } from './memory.ts';
 import { handleMcp, makeClaude } from './llm.ts';
 import { makeExaTools } from './tools.ts';
@@ -17,35 +17,36 @@ try {
 } catch {}
 
 const env = (k: string, fallback = '') => process.env[k]?.trim() || fallback;
-for (const k of ['CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CONFIG_DIR', 'EXA_API_KEY']) {
-  if (!env(k)) console.warn(`Missing ${k} in .env, requests will fail.`);
+
+// Claude access: a Claude subscription token (from `npx claude setup-token`)
+// or an Anthropic API key. The token wins when both are set.
+const oauthToken = env('CLAUDE_CODE_OAUTH_TOKEN');
+const apiKey = oauthToken ? '' : env('ANTHROPIC_API_KEY');
+if (!oauthToken && !apiKey) {
+  console.warn(
+    'Set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in .env, or every answer will fail.'
+  );
 }
+if (!env('EXA_API_KEY')) console.warn('Missing EXA_API_KEY in .env, searches will fail.');
 if (!env('AGENT_API_TOKEN')) {
   console.warn('AGENT_API_TOKEN is not set: /api is open to anyone who can reach this server.');
 }
 
-// The CLI binary, spawned without a shell. On Windows the npm install puts a
-// .cmd shim on PATH that wraps a native claude.exe; we run the exe directly.
-function claudeBin(): string {
-  if (env('CLAUDE_BIN')) return env('CLAUDE_BIN');
-  const win = process.platform === 'win32';
-  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
-    const direct = join(dir, win ? 'claude.exe' : 'claude');
-    if (existsSync(direct)) return direct;
-    const shimmed = join(dir, 'node_modules/@anthropic-ai/claude-code/bin/claude.exe');
-    if (win && existsSync(join(dir, 'claude.cmd')) && existsSync(shimmed)) return shimmed;
-  }
-  throw new Error('claude CLI not found on PATH. Install it or set CLAUDE_BIN.');
-}
+// The CLI comes from the pinned @anthropic-ai/claude-code dependency, whose
+// postinstall puts the native binary at bin/claude.exe on every platform.
+// It is spawned directly, without a shell.
+const bundledClaude = fileURLToPath(
+  new URL('../node_modules/@anthropic-ai/claude-code/bin/claude.exe', import.meta.url)
+);
 
 const port = Number(env('PORT', '3000'));
 const db = openDb(env('DB_PATH', 'data/meowgle.db'));
 const model = makeClaude({
-  bin: claudeBin(),
+  bin: env('CLAUDE_BIN', bundledClaude),
   model: env('CLAUDE_MODEL', 'claude-opus-5-5'),
   effort: env('CLAUDE_EFFORT', 'low'),
-  configDir: env('CLAUDE_CONFIG_DIR'),
-  token: env('CLAUDE_CODE_OAUTH_TOKEN'),
+  configDir: resolve(env('CLAUDE_CONFIG_DIR', 'data/claude-config')),
+  auth: { oauthToken, apiKey },
   mcpBase: `http://127.0.0.1:${port}`,
 });
 const tools = makeExaTools(env('EXA_API_KEY'));

@@ -128,28 +128,33 @@ export async function handleMcp(req: IncomingMessage, res: ServerResponse, id: s
 }
 
 // ---------------------------------------------------------------------------
-// The model: one `claude -p` process per run, on the owner's subscription.
+// The model: one `claude -p` process per run, on whoever runs the app's
+// Claude subscription token or Anthropic API key.
 //
 // Isolation: a dedicated CLAUDE_CONFIG_DIR, no setting sources, no built-in
 // tools, only our MCP server, and an empty working dir outside any project.
+// Only the one credential in use is passed down, since the CLI prefers an
+// API key over a token whenever both are in its environment.
 // ---------------------------------------------------------------------------
 export function makeClaude(cfg: {
   bin: string;
   model: string;
   effort: string;
   configDir: string;
-  token: string;
+  auth: { oauthToken?: string; apiKey?: string };
   mcpBase: string;
   timeoutMs?: number;
 }): Model {
   const workdir = join(tmpdir(), 'meowgle');
   mkdirSync(workdir, { recursive: true });
+  mkdirSync(cfg.configDir, { recursive: true });
 
   const env: NodeJS.ProcessEnv = Object.fromEntries(
     Object.entries(process.env).filter(([k]) => !/^(CLAUDE|ANTHROPIC)/.test(k))
   );
   env.CLAUDE_CONFIG_DIR = cfg.configDir;
-  env.CLAUDE_CODE_OAUTH_TOKEN = cfg.token;
+  if (cfg.auth.oauthToken) env.CLAUDE_CODE_OAUTH_TOKEN = cfg.auth.oauthToken;
+  else if (cfg.auth.apiKey) env.ANTHROPIC_API_KEY = cfg.auth.apiKey;
 
   const base = [
     '-p',
