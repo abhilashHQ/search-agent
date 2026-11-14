@@ -1153,7 +1153,14 @@
         return sections;
       }
 
-      const chars = (n) => (n < 1000 ? `${n} chars` : `${(n / 1000).toFixed(1)}k chars`);
+      // Sizes are estimated tokens. The app has no Claude tokenizer, so they
+      // use chars-per-token ratios measured on claude-opus-5-5 against the
+      // CLI's reported input usage (15 Nov 2026). Prose packs the most chars
+      // per token; the date-heavy message fewer; tool output with tables and
+      // URLs the fewest.
+      const CHARS_PER_TOKEN = { system: 3.3, message: 2.5, tool: 2.1 };
+      const tokens = (text, kind) => Math.round(text.length / CHARS_PER_TOKEN[kind]);
+      const fmtTokens = (n) => `≈${n < 1000 ? n : `${(n / 1000).toFixed(1)}k`} tokens`;
 
       function block(title, size, parts, open = false) {
         const d = el('details');
@@ -1206,23 +1213,30 @@
         }
         const c = await res.json();
         const sections = promptSections(c.prompt);
-        const toolText = c.tools.reduce((n, t) => n + t.result.length, 0);
-        const total = c.system.length + c.prompt.length + toolText;
-        $('#ctx-sub').textContent = `What went into the model · ${chars(total)}`;
+        const total =
+          tokens(c.system, 'system') +
+          tokens(c.prompt, 'message') +
+          c.tools.reduce((n, t) => n + tokens(t.result, 'tool'), 0);
+        $('#ctx-sub').textContent = `What went into the model · ${fmtTokens(total)}, estimated`;
 
         const body = [
           el('div', 'group', 'System prompt'),
-          block('Same on every turn', chars(c.system.length), [[null, c.system]]),
+          block('Same on every turn', fmtTokens(tokens(c.system, 'system')), [[null, c.system]]),
           el('div', 'group', 'Message'),
           ...sections.map(([title, text]) =>
-            block(title, chars(text.length), [[null, text]], title === 'Their message')
+            block(
+              title,
+              fmtTokens(tokens(text, 'message')),
+              [[null, text]],
+              title === 'Their message'
+            )
           ),
           el('div', 'group', `Tool calls · ${c.tools.length}`),
         ];
         if (!c.tools.length) body.push(el('div', 'note', 'No tool calls this turn.'));
         for (const t of c.tools) {
           body.push(
-            block(toolTitle(t), chars(t.result.length), [
+            block(toolTitle(t), fmtTokens(tokens(t.result, 'tool')), [
               ['Arguments', JSON.stringify(t.args, null, 2)],
               ['Returned to the model', t.result],
             ])

@@ -233,7 +233,7 @@ Timezone: everything is stored in UTC and rendered in the request's `tz`. If `tz
 - The answer streams in as markdown. Keep the renderer tiny and inline: paragraphs, lists, bold, links, code.
 - `[n]` renders as a small clickable superscript. A sources row under the answer shows favicon, domain and title.
 - Sends `tz` from `Intl.DateTimeFormat().resolvedOptions().timeZone`.
-- A Context button under each answer opens a right-hand panel with that turn's `model_input`: the system prompt, the prompt split at the headings the app writes, and each tool call with its arguments and result, each collapsible with its size.
+- A Context button under each answer opens a right-hand panel with that turn's `model_input`: the system prompt, the prompt split at the headings the app writes, and each tool call with its arguments and result, each collapsible with its size in estimated tokens (chars-per-token ratios measured on claude-opus-5-5: 3.3 for the system prompt, 2.5 for the message, 2.1 for tool output).
 - No auth. The server listens on 127.0.0.1 only, and `POST /api/chat` requires `content-type: application/json`, so another site open in the browser can't trigger turns without a CORS preflight, which the server never answers.
 
 ## Tests (`node:test`, no network)
