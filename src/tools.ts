@@ -58,14 +58,21 @@ export const TOOL_SCHEMAS = [
 ];
 
 // Adds a source to the book, or appends more text to the one already there.
-function addSource(book: Book, url: string, title: string, opened: boolean, text: string): Source {
+function addSource(
+  book: Book,
+  url: string,
+  title: string,
+  opened: boolean,
+  text: string,
+  at: Date
+): Source {
   let s = book.get(url);
   if (!s) {
     s = {
       n: book.size + 1,
       url,
       title: title || domain(url),
-      fetched_at: new Date().toISOString(),
+      fetched_at: at.toISOString(),
       opened,
       text: '',
     };
@@ -97,7 +104,7 @@ async function exa(path: string, body: object, key: string): Promise<any> {
   }
 }
 
-export function makeExaTools(key: string): Tools {
+export function makeExaTools(key: string, clock = () => new Date()): Tools {
   return {
     // One Exa /search per query, all in parallel. Hits are numbered into the
     // book and rendered as blocks the model can cite, grouped under the query
@@ -143,7 +150,7 @@ export function makeExaTools(key: string): Tools {
           }
           seen.add(hit.url);
           const excerpt = (hit.highlights ?? []).join(' … ');
-          const s = addSource(book, hit.url, hit.title, false, excerpt);
+          const s = addSource(book, hit.url, hit.title, false, excerpt, clock());
           const date = hit.publishedDate
             ? `published ${hit.publishedDate.slice(0, 10)}`
             : 'no publish date';
@@ -203,7 +210,7 @@ export function makeExaTools(key: string): Tools {
           !focus && body.length >= maxChars
             ? `\n[Cut off at ${maxChars} characters. Open it again with a focus to reach a detail further down.]`
             : '';
-        const s = addSource(book, page.url ?? st.id, page.title, true, body);
+        const s = addSource(book, page.url ?? st.id, page.title, true, body, clock());
         const how = st.source === 'crawled' ? 'live' : 'cached copy';
         const date = page.publishedDate
           ? `published ${page.publishedDate.slice(0, 10)}`

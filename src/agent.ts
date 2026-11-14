@@ -36,7 +36,8 @@ export type AgentEvent =
 // ---------------------------------------------------------------------------
 // Answer cleanup
 //
-// gpt-oss emits odd unicode and its own citation syntax. cleanAnswer runs on
+// Models emit odd unicode and their own citation syntaxes (gpt-oss did, when
+// it was the model; the cleanup stays for any model). cleanAnswer runs on
 // every streamed chunk and on the final text. Each step is one pass; the
 // order matters, so the steps are grouped and commented rather than chained
 // into one expression.

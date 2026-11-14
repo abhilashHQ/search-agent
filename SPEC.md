@@ -47,11 +47,13 @@ src/tools.ts     the web_search schema + webSearch() + openPage() against Exa
 src/memory.ts    db open/migrate, turn writes, FTS index, renderLedger(), renderDateStrip(), extractClaims()
 src/recall.ts    findPast() + recallPast(): which past chats ride along with a message
 src/prompt.ts    SYSTEM_PROMPT constant + buildMessages()
+src/setup.ts     setup(): db, model and tools from .env, shared by the server and the seed
+scripts/seed.ts  npm run seed
 public/index.html
 test/*.test.ts
 ```
 
-Eight files plus tests (recall.ts split out of memory.ts, which was already past the limit). If a file passes ~250 lines, stop and ask before splitting it.
+Nine files plus the seed and tests (recall.ts split out of memory.ts, which was already past the limit; setup.ts so the server and the seed build the same deps). If a file passes ~250 lines, stop and ask before splitting it.
 
 ## Data model
 
@@ -256,7 +258,10 @@ Reviewers clone the repo and run it on their own Claude access: `npm install`, c
 
 There is no hosted demo on the owner's subscription. Anthropic's Claude Code terms don't allow routing other people's requests through Pro/Max credentials. A hosted demo would need an API key with a spend cap, a shared password in front of `/api`, and server-side caps on concurrency, daily turns and effort.
 
-## Deferred
+## Seed (`npm run seed`)
 
-- `npm run seed` with backdated demo turns. Reviewers start with an empty DB, so this is needed before submitting.
-- DESIGN.md (one page) and README.
+Fills an empty database with a past, so reviewers can try the memory questions on day one. It refuses to run on a database that has turns.
+
+- Four scripted questions go through the real `runTurn`, real Exa and the real extractor. Nothing is written by hand.
+- Each runs with the clock (`deps.now`, and the tools' `clock` that stamps `fetched_at`) set to the day it was "asked": 3 November 11:00, last Monday 10:30 and 10:45 (same chat), last Tuesday 16:00, in the machine's timezone. Days resolve through `namedDays`, the same function the agent uses later. A step that would land on today is skipped.
+- The seed serves the MCP route itself on a free port, and waits for each turn's background filing (`model.json` calls) before the next question, so later questions can recall earlier ones.

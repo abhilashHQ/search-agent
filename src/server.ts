@@ -1,51 +1,12 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { openDb, listConversations, conversationTurns } from './memory.ts';
-import { handleMcp, makeClaude } from './llm.ts';
-import { makeExaTools } from './tools.ts';
+import { listConversations, conversationTurns } from './memory.ts';
+import { handleMcp } from './llm.ts';
 import { runTurn } from './agent.ts';
-
-// ---------------------------------------------------------------------------
-// Setup
-// ---------------------------------------------------------------------------
-
-try {
-  process.loadEnvFile();
-} catch {}
-
-const env = (k: string, fallback = '') => process.env[k]?.trim() || fallback;
-
-// Claude access: a Claude subscription token (from `npx claude setup-token`)
-// or an Anthropic API key. The token wins when both are set.
-const oauthToken = env('CLAUDE_CODE_OAUTH_TOKEN');
-const apiKey = oauthToken ? '' : env('ANTHROPIC_API_KEY');
-if (!oauthToken && !apiKey) {
-  console.warn(
-    'Set CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY in .env, or every answer will fail.'
-  );
-}
-if (!env('EXA_API_KEY')) console.warn('Missing EXA_API_KEY in .env, searches will fail.');
-
-// The CLI comes from the pinned @anthropic-ai/claude-code dependency, whose
-// postinstall puts the native binary at bin/claude.exe on every platform.
-// It is spawned directly, without a shell.
-const bundledClaude = fileURLToPath(
-  new URL('../node_modules/@anthropic-ai/claude-code/bin/claude.exe', import.meta.url)
-);
+import { env, setup } from './setup.ts';
 
 const port = Number(env('PORT', '3000'));
-const db = openDb(env('DB_PATH', 'data/meowgle.db'));
-const model = makeClaude({
-  bin: env('CLAUDE_BIN', bundledClaude),
-  model: env('CLAUDE_MODEL', 'claude-opus-5-5'),
-  effort: env('CLAUDE_EFFORT', 'low'),
-  configDir: resolve(env('CLAUDE_CONFIG_DIR', 'data/claude-config')),
-  auth: { oauthToken, apiKey },
-  mcpBase: `http://127.0.0.1:${port}`,
-});
-const tools = makeExaTools(env('EXA_API_KEY'));
+const { db, model, tools } = setup(`http://127.0.0.1:${port}`);
 const indexHtml = new URL('../public/index.html', import.meta.url);
 
 // ---------------------------------------------------------------------------
