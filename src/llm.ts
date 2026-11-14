@@ -161,8 +161,9 @@ export function makeClaude(cfg: {
     cfg.model,
   ];
 
-  // Spawns the CLI with the system prompt in a file (the ledger can outgrow a
-  // Windows command line) and the prompt on stdin, yielding stdout lines.
+  // Spawns the CLI with the system prompt in a file and the prompt on stdin
+  // (it can carry the whole ledger, which outgrows a Windows command line),
+  // yielding stdout lines.
   async function* exec(
     messages: Message[],
     args: string[],

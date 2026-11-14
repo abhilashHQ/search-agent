@@ -126,7 +126,7 @@ Timeouts: 10s per Exa call. Retry once on 5xx or a network error. Never throw ou
 7. Emit `done`.
 8. Fire `extractClaims(turnId)` without awaiting it.
 
-Process: one `claude -p` per turn, timeout by effort (120s / 150s / 300s). Flags: `--strict-mcp-config --setting-sources "" --no-session-persistence --tools "" --allowedTools mcp__meowgle__web_search mcp__meowgle__open_page --model --effort --thinking-display summarized`. The last one is a hidden flag: `-p` otherwise sends `display: "omitted"`, so thinking blocks stream with empty text and the UI has nothing to show. The `showThinkingSummaries` setting does not help in `-p` mode. Thinking is adaptive, so easy turns and many low-effort turns have none. The system prompt goes in a temp file (`--system-prompt-file`, the ledger can outgrow a Windows command line), the prompt on stdin. Env drops every inherited `CLAUDE*` / `ANTHROPIC*` var and sets `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_OAUTH_TOKEN`. Working dir is an empty folder under the OS temp dir, outside any project, so no CLAUDE.md is picked up. On Windows the binary is the native `claude.exe` behind npm's `.cmd` shim, spawned without a shell.
+Process: one `claude -p` per turn, timeout by effort (120s / 150s / 300s). Flags: `--strict-mcp-config --setting-sources "" --no-session-persistence --tools "" --allowedTools mcp__meowgle__web_search mcp__meowgle__open_page --model --effort --thinking-display summarized`. The last one is a hidden flag: `-p` otherwise sends `display: "omitted"`, so thinking blocks stream with empty text and the UI has nothing to show. The `showThinkingSummaries` setting does not help in `-p` mode. Thinking is adaptive, so easy turns and many low-effort turns have none. The system prompt goes in a temp file (`--system-prompt-file`) and the prompt on stdin, since the prompt can carry the whole ledger, which outgrows a Windows command line. Env drops every inherited `CLAUDE*` / `ANTHROPIC*` var and sets `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_OAUTH_TOKEN`. Working dir is an empty folder under the OS temp dir, outside any project, so no CLAUDE.md is picked up. On Windows the binary is the native `claude.exe` behind npm's `.cmd` shim, spawned without a shell.
 
 `--safe-mode` is not used: it disables MCP servers too, which removes our tools.
 
@@ -158,7 +158,7 @@ Other routes:
 
 `buildMessages()` order:
 
-The instructions and ledger go in a `developer` message, which becomes the CLI's system prompt. The CLI takes one user prompt, so chat history is flattened into an `<earlier_chat>` block (`<person>` / `<meowgle>` tags) above the current message. The newest earlier reply carries the titles and URLs it cited.
+The instructions go in a `developer` message, which becomes the CLI's system prompt. It stays byte-identical across turns so it hits the prompt cache. When the ledger is attached, it goes in the current user message after the date strip. The CLI takes one user prompt, so chat history is flattened into an `<earlier_chat>` block (`<person>` / `<meowgle>` tags) above the current message. The newest earlier reply carries the titles and URLs it cited.
 
 1. **System prompt** (static constant). Contains:
    - **Voice:** a sharp, warm friend who knows the topic. Lead with the direct answer. Explain what it means for this person in plain prose. Bullets only for real side-by-side comparisons. No headers in short answers, minimal bold, no "Great question". Match the user's length and tone. Chit-chat gets a short reply with no search.

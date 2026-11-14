@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { setImmediate as tick } from 'node:timers/promises';
 import { runTurn, cleanAnswer, type AgentEvent } from '../src/agent.ts';
-import { refersToPast } from '../src/prompt.ts';
+import { SYSTEM_PROMPT, refersToPast } from '../src/prompt.ts';
 import { openDb, startTurn, finishTurn } from '../src/memory.ts';
 import type { Message, Model } from '../src/llm.ts';
 import type { Book, Tools } from '../src/tools.ts';
@@ -201,9 +201,10 @@ test('runTurn: tool rounds, streamed answer, persistence, live re-open, extracti
   assert.equal(runs.length, 1);
   const { messages } = runs[0];
   assert.equal(messages[0].role, 'developer');
-  assert.match(messages[0].content, /\] "Neon pricing\?"/);
-  assert.doesNotMatch(messages[0].content.split('# Log of past questions')[1], /\$19/);
+  assert.equal(messages[0].content, SYSTEM_PROMPT);
   const tail = messages.at(-1)!.content;
+  assert.match(tail, /\] "Neon pricing\?"/);
+  assert.doesNotMatch(tail.split('# Log of past questions')[1].split('Saved findings')[0], /\$19/);
   assert.match(
     tail,
     /^Now: Thu 12 Nov 2026 16:40 \(Asia\/Kolkata\)\nLast 14 days:\nThu 12 Nov = 2026-11-12 \(today\)/
@@ -307,7 +308,8 @@ test('runTurn: a question that does not refer to the past gets no log and no sav
   ));
   assert.ok(runs[0].messages.every((m) => !/\$47|Saved findings from past/.test(m.content)));
   assert.ok(runs[0].messages.every((m) => !m.content.includes('"Neon pricing?"')));
-  assert.match(runs[0].messages[0].content, /# Log of past questions: not attached/);
+  assert.equal(runs[0].messages[0].content, SYSTEM_PROMPT);
+  assert.match(runs[0].messages.at(-1)!.content, /# Log of past questions: not attached/);
 });
 
 test('runTurn: tool calls past the budget are refused and effort reaches the model', async () => {

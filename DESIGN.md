@@ -48,7 +48,7 @@ Models are bad at date arithmetic. So every message opens with the user's local 
 
 ## The prompt
 
-One prompt, written as prose in the voice the replies should have. Earlier versions were stacks of rules with word counts and format bans, and every answer came out the same size and shape. Now the prompt explains what MeowGle is for and why each habit matters, and leaves length to the question. Hard rules are kept to what the app needs to work: tools, citation format, dates, memory.
+One prompt, written as prose in the voice the replies should have. Earlier versions were stacks of rules with word counts and format bans, and every answer came out the same size and shape. The next version explained each habit in prose and got analyst briefings: dense multi-sentence bullets and bull case, bear case, my take. Now the prompt describes who MeowGle is talking to and carries short example exchanges (small talk, a buy question, a news question, a price lookup with a pushback and a follow-up). Length is handled by reasoning, not a cap: the prompt asks the model to pick the three or four things worth repeating and keep the rest for follow-ups, and explains why one-fact list items and sparse bold read faster. The examples set voice and shape: plain text for quick facts, and for multi-part answers a lead-in line and short list items that each open with a bold point. Hard rules are kept to what the app needs to work: tools, citation format, dates, memory.
 
 ## Streaming and cleanup
 
