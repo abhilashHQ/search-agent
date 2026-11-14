@@ -7,12 +7,12 @@ import {
   finishTurn,
   knownUrls,
   recentMessages,
-  renderFindings,
-  renderLedger,
+  renderAboutThem,
   resolveTz,
   startTurn,
   type Source,
 } from './memory.ts';
+import { recallPast } from './recall.ts';
 
 export type Deps = { db: DatabaseSync; model: Model; tools: Tools; now?: () => Date };
 
@@ -112,7 +112,8 @@ function strings(value: unknown, max: number): string[] {
 // ---------------------------------------------------------------------------
 
 // Runs one tool call: yields progress events, returns the text the model gets
-// back. Every source seen lands in `book`, the shared ledger for this turn.
+// back. Searches and page reads in the same call run in parallel. Every source
+// seen lands in `book`, the shared ledger for this turn.
 async function* runTool(
   name: string,
   args: Record<string, unknown>,
@@ -121,30 +122,26 @@ async function* runTool(
   known: Set<string>,
   pageChars: number
 ): AsyncGenerator<AgentEvent, string> {
-  if (name === 'web_search') {
-    const queries = strings(args.queries, 8);
-    if (!queries.length) return 'Error: queries must be a non-empty list of strings.';
-    const since = isDay(args.since) ? args.since : undefined;
+  if (name !== 'web_search') return `Error: unknown tool ${name}.`;
+  const queries = strings(args.queries, 8);
+  const urls = strings(args.urls, 5);
+  if (!queries.length && !urls.length)
+    return 'Error: pass queries, urls or both, each a non-empty list of strings.';
+  const since = isDay(args.since) ? args.since : undefined;
+  const focus = typeof args.focus === 'string' && args.focus.trim() ? args.focus : undefined;
+  const live = urls.some((u) => known.has(u)); // known URLs get fetched fresh
 
-    yield { type: 'search', queries, ...(since ? { since } : {}) };
-    const r = await deps.tools.webSearch({ queries, since }, book);
-    yield { type: 'search_done', results: r.ok, domains: r.domains };
-    return r.text;
-  }
+  if (queries.length) yield { type: 'search', queries, ...(since ? { since } : {}) };
+  if (urls.length) yield { type: 'open', urls, live };
+  const [found, read] = await Promise.all([
+    queries.length ? deps.tools.webSearch({ queries, since }, book) : undefined,
+    urls.length ? deps.tools.openPage({ urls, focus }, book, live, pageChars) : undefined,
+  ]);
+  if (found) yield { type: 'search_done', results: found.ok, domains: found.domains };
+  if (read) yield { type: 'open_done', ok: read.ok, failed: read.failed };
 
-  if (name === 'open_page') {
-    const urls = strings(args.urls, 5);
-    if (!urls.length) return 'Error: urls must be a non-empty list of strings.';
-    const focus = typeof args.focus === 'string' && args.focus.trim() ? args.focus : undefined;
-    const live = urls.some((u) => known.has(u)); // known URLs get fetched fresh
-
-    yield { type: 'open', urls, live };
-    const r = await deps.tools.openPage({ urls, focus }, book, live, pageChars);
-    yield { type: 'open_done', ok: r.ok, failed: r.failed };
-    return r.text;
-  }
-
-  return `Error: unknown tool ${name}.`;
+  if (found && read) return `# Search results\n${found.text}\n\n# Pages\n${read.text}`;
+  return (found ?? read)!.text;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +181,8 @@ function queue<T>() {
 
 // One user question, end to end:
 //   1. persist the turn and resolve the timezone
-//   2. build the opening messages (system, ledger, findings, history, question)
+//   2. build the opening messages (system, this chat, what they've told us,
+//      matching past chats, the question)
 //   3. run the model; it calls our tools over MCP, within the effort's budget
 //   4. clean up the answer, persist it with the sources it cited
 //   5. file findings into long-term memory in the background
@@ -209,10 +207,15 @@ export async function* runTurn(
   yield { type: 'start', conversationId, turnId };
 
   // -- 2. opening context
-  const past = refersToPast(req.message);
   const messages: Message[] = buildMessages({
-    ledger: past ? renderLedger(db, tz) : undefined,
-    findings: past ? renderFindings(db, tz) : '',
+    about: renderAboutThem(db, tz),
+    past: recallPast(db, {
+      message: req.message,
+      conversationId,
+      now,
+      tz,
+      refersBack: refersToPast(req.message),
+    }),
     history: recentMessages(db, conversationId),
     now,
     tz,

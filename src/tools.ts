@@ -16,54 +16,42 @@ export type Tools = {
   ): Promise<ToolResult>;
 };
 
-// Tool schemas shown to the model.
+// The one tool the model sees. Queries search, urls read pages, and both can
+// ride in the same call; the harness runs them in parallel.
 export const TOOL_SCHEMAS = [
   {
     type: 'function',
     function: {
       name: 'web_search',
       description:
-        'Search the web. Each query runs on its own and in parallel, so put every separate thing you need to know' +
-        ' in one call as its own query. Returns up to 6 results per query, numbered for citation, each with its URL,' +
-        ' publish date and short excerpts from a cached copy of the page. Excerpts are enough to choose which pages' +
-        ' to read and to answer facts that do not change. They can be out of date or cut off.',
+        'Search the web and read pages, in parallel, in one call. Pass queries, urls, or both.' +
+        ' queries: each runs on its own, so put every separate thing you need to know in as its own query.' +
+        ' Returns up to 6 results per query, numbered for citation, each with its URL, publish date and short' +
+        ' excerpts from a cached copy of the page. Excerpts are enough to choose which pages to read and to answer' +
+        ' facts that do not change. They can be out of date or cut off.' +
+        ' urls: reads up to 5 pages. This is how you get a current reading. Without focus you get the first part' +
+        ' of each page, which suits articles and announcements. With focus you get only the passages about it,' +
+        ' which suits long pages where you need one detail, such as pricing tables, docs and changelogs.' +
+        ' Each page comes back marked live or cached copy. A FAILED page did not load, so use another source for it.',
       parameters: {
         type: 'object',
         properties: {
           queries: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 8 },
+          urls: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5 },
           since: {
             type: 'string',
             description:
-              'YYYY-MM-DD. Only for news or changes after a point in time ("this week", "since Monday").' +
-              ' It hides everything published earlier, including profiles, docs and pricing pages,' +
-              ' so leave it out for normal lookups.',
+              'YYYY-MM-DD, applies to queries only. Only for news or changes after a point in time' +
+              ' ("this week", "since Monday"). It hides everything published earlier, including profiles,' +
+              ' docs and pricing pages, so leave it out for normal lookups.',
           },
-        },
-        required: ['queries'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'open_page',
-      description:
-        'Read up to 5 pages in one call. Without focus you get the first part of each page, which suits' +
-        ' articles and announcements. With focus you get only the passages about it, which suits long pages where' +
-        ' you need one detail, such as pricing tables, docs and changelogs. This is how you get a current reading,' +
-        ' since search excerpts come from cached copies. Each page comes back marked live or cached copy.' +
-        ' A FAILED page did not load, so use another source for it.',
-      parameters: {
-        type: 'object',
-        properties: {
-          urls: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 5 },
           focus: {
             type: 'string',
             description:
-              'The detail to pull out, phrased the way the page would state it, e.g. "Pro plan monthly price per user".',
+              'Applies to urls only. The detail to pull out, phrased the way the page would state it,' +
+              ' e.g. "Pro plan monthly price per user".',
           },
         },
-        required: ['urls'],
       },
     },
   },
@@ -192,7 +180,7 @@ export function makeExaTools(key: string): Tools {
         );
       } catch (e) {
         return {
-          text: `open_page failed: ${(e as Error).message}`,
+          text: `Reading pages failed: ${(e as Error).message}`,
           ok: 0,
           failed: urls.length,
           domains: [],

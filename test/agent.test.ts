@@ -149,7 +149,7 @@ test('runTurn: tool rounds, streamed answer, persistence, live re-open, extracti
   const { model, runs } = fakeModel(
     [
       { kind: 'thinking', text: 'Re-open the stored page.' },
-      call('open_page', { urls: ['https://neon.com/pricing'], focus: 'Launch price' }),
+      call('web_search', { urls: ['https://neon.com/pricing'], focus: 'Launch price' }),
       call('web_search', { queries: ['Neon pricing change'], since: '2026-11-10' }),
       text('\nStill $19/month 【'),
       text('1†L3-L5】 per Neon [2], nothing new [7].'),
@@ -204,23 +204,26 @@ test('runTurn: tool rounds, streamed answer, persistence, live re-open, extracti
   assert.equal(messages[0].content, SYSTEM_PROMPT);
   const tail = messages.at(-1)!.content;
   assert.match(tail, /\] "Neon pricing\?"/);
-  assert.doesNotMatch(tail.split('# Log of past questions')[1].split('Saved findings')[0], /\$19/);
+  assert.doesNotMatch(
+    tail.split('# Log of past questions')[1].split('# Past exchanges')[0],
+    /\$19/
+  );
   assert.match(
     tail,
     /^Now: Thu 12 Nov 2026 16:40 \(Asia\/Kolkata\)\nLast 14 days:\nThu 12 Nov = 2026-11-12 \(today\)/
   );
   assert.match(
     tail,
-    /Saved findings[\s\S]*- Neon \| Launch price: \$19\/month \(as of 10 Nov, https:\/\/neon\.com\/pricing\)\n\nIs that still right\?\n\n\[Note from the app, not from them\./
+    /# Past exchanges that best match this message, in full\n## \[Tue 10 Nov 2026 14:02\] they asked: "Neon pricing\?"\nYou replied:\nNeon Launch is \$19\/month\.\nPages behind it: Neon \(https:\/\/neon\.com\/pricing, read 10 Nov\)/
+  );
+  assert.match(
+    tail,
+    /Values saved from it:\n- Neon \| Launch price: \$19\/month \(as of 10 Nov, https:\/\/neon\.com\/pricing\)\n\n# Their message\nIs that still right\?\n\n\[Note from the app, not from them\./
   );
   const { toolResults } = runs[0];
   assert.equal(toolResults.length, 2);
   assert.ok(
-    toolResults.every((t) =>
-      /\n\n\[Today is Thu 12 Nov 2026\. [12] tool calls? left\.\]$/.test(
-        t
-      )
-    )
+    toolResults.every((t) => /\n\n\[Today is Thu 12 Nov 2026\. [12] tool calls? left\.\]$/.test(t))
   );
   assert.match(
     toolResults[0],
@@ -286,7 +289,7 @@ test('refersToPast: catches questions about history, ignores small talk and fres
     assert.ok(!refersToPast(q), q);
 });
 
-test('runTurn: a question that does not refer to the past gets no log and no saved findings', async () => {
+test('runTurn: a fresh question gets a dated one-liner on a matching past chat, never the log or saved values', async () => {
   const db = openDb(':memory:');
   const past = startTurn(db, {
     question: 'Neon pricing?',
@@ -306,10 +309,23 @@ test('runTurn: a question that does not refer to the past gets no log and no sav
     { db, model, tools: fakeTools().tools },
     { message: 'what does neon cost', tz: 'UTC' }
   ));
-  assert.ok(runs[0].messages.every((m) => !/\$47|Saved findings from past/.test(m.content)));
-  assert.ok(runs[0].messages.every((m) => !m.content.includes('"Neon pricing?"')));
+  const tail = runs[0].messages.at(-1)!.content;
   assert.equal(runs[0].messages[0].content, SYSTEM_PROMPT);
-  assert.match(runs[0].messages.at(-1)!.content, /# Log of past questions: not attached/);
+  assert.match(
+    tail,
+    /# Past chats that share words with this message[^\n]*\n\[Tue 10 Nov 2026 08:32\] they asked "Neon pricing\?" -> you: Neon Launch is \$47\/month\.\n\n# Their message/
+  );
+  assert.doesNotMatch(tail, /# Log of past questions|Values saved/);
+
+  const chat = fakeModel([text('Hey.')], { topic: 't', entities: [], claims: [] });
+  for await (const _ of runTurn(
+    { db, model: chat.model, tools: fakeTools().tools },
+    { message: 'hey whats up', tz: 'UTC' }
+  ));
+  assert.match(
+    chat.runs[0].messages.at(-1)!.content,
+    /# Past chats: nothing attached for this message\./
+  );
 });
 
 test('runTurn: tool calls past the budget are refused and effort reaches the model', async () => {
@@ -338,6 +354,29 @@ test('runTurn: tool calls past the budget are refused and effort reaches the mod
     /Effort is medium[\s\S]*You have 6 tool calls at most/
   );
   assert.equal(events.at(-1)?.type, 'done');
+});
+
+test('runTurn: one web_search call can search and read pages in parallel, and needs one of them', async () => {
+  const db = openDb(':memory:');
+  const { model, runs } = fakeModel(
+    [
+      call('web_search', { queries: ['neon news'], urls: ['https://neon.com/pricing'] }),
+      call('web_search', { since: '2026-11-01' }),
+      text('Done [1].'),
+    ],
+    { topic: 't', entities: [], claims: [] }
+  );
+  const { tools, seen } = fakeTools();
+  const events: AgentEvent[] = [];
+  for await (const e of runTurn({ db, model, tools }, { message: 'neon?', tz: 'UTC' }))
+    events.push(e);
+  assert.deepEqual(
+    events.map((e) => e.type).filter((t) => /search|open/.test(t)),
+    ['search', 'open', 'search_done', 'open_done']
+  );
+  assert.equal(seen.live, false);
+  assert.match(runs[0].toolResults[0], /^# Search results\n[\s\S]*\n\n# Pages\n\[1\] Neon pricing/);
+  assert.match(runs[0].toolResults[1], /^Error: pass queries, urls or both/);
 });
 
 test('runTurn: narration streamed before a tool call is retracted into thinking, not stored as the answer', async () => {
