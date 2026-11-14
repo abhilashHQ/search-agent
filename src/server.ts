@@ -1,5 +1,4 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,9 +27,6 @@ if (!oauthToken && !apiKey) {
   );
 }
 if (!env('EXA_API_KEY')) console.warn('Missing EXA_API_KEY in .env, searches will fail.');
-if (!env('AGENT_API_TOKEN')) {
-  console.warn('AGENT_API_TOKEN is not set: /api is open to anyone who can reach this server.');
-}
 
 // The CLI comes from the pinned @anthropic-ai/claude-code dependency, whose
 // postinstall puts the native binary at bin/claude.exe on every platform.
@@ -109,17 +105,6 @@ async function chat(req: IncomingMessage, res: ServerResponse) {
   res.end();
 }
 
-// With AGENT_API_TOKEN set, every /api route needs it as a Bearer token. The
-// page itself stays public so it can ask for the token.
-const digest = (s: string) => createHash('sha256').update(s).digest();
-const apiToken = env('AGENT_API_TOKEN');
-
-function authorized(req: IncomingMessage): boolean {
-  if (!apiToken) return true;
-  const given = req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? '';
-  return timingSafeEqual(digest(given), digest(apiToken));
-}
-
 // ---------------------------------------------------------------------------
 // Routing
 //
@@ -134,10 +119,12 @@ createServer(async (req, res) => {
   try {
     const mcp = url.pathname.match(/^\/mcp\/([\w-]{36})$/);
     if (mcp) return await handleMcp(req, res, mcp[1]);
-    if (url.pathname.startsWith('/api/') && !authorized(req)) {
-      return json(res, 401, { error: 'Unauthorized' });
-    }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
+      // A JSON content type can't be sent cross-site without a CORS preflight,
+      // which this server never answers, so other sites can't spend turns.
+      if (!req.headers['content-type']?.startsWith('application/json')) {
+        return json(res, 415, { error: 'Send JSON' });
+      }
       return await chat(req, res);
     }
     if (req.method === 'GET' && url.pathname === '/api/conversations') {
@@ -158,4 +145,4 @@ createServer(async (req, res) => {
     if (!res.headersSent) json(res, 500, { error: 'Internal error' });
     else res.end();
   }
-}).listen(port, () => console.log(`MeowGle on http://localhost:${port}`));
+}).listen(port, '127.0.0.1', () => console.log(`MeowGle on http://localhost:${port}`));

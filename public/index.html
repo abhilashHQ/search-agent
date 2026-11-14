@@ -958,31 +958,8 @@
         $('#thread').replaceChildren(e);
       }
 
-      // Every /api call carries the access token when the server asks for one.
-      // On a 401 the page asks once, keeps the token, and retries.
-      const readToken = () => {
-        try {
-          return localStorage.getItem('token') || '';
-        } catch {
-          return '';
-        }
-      };
-      let token = readToken();
-
-      async function api(path, init = {}) {
-        for (let attempt = 0; ; attempt++) {
-          const headers = { ...init.headers, ...(token && { authorization: `Bearer ${token}` }) };
-          const res = await fetch(path, { ...init, headers });
-          if (res.status !== 401 || attempt) return res;
-          token = (prompt('Access token for this demo:') || '').trim();
-          try {
-            localStorage.setItem('token', token);
-          } catch {}
-        }
-      }
-
       async function loadList() {
-        const list = await (await api('/api/conversations')).json();
+        const list = await (await fetch('/api/conversations')).json();
         $('#convs').replaceChildren(
           ...list.map((c) => {
             const a = el('a', c.id === conversationId ? 'on' : '', c.title || 'Untitled');
@@ -1008,7 +985,7 @@
           return;
         }
 
-        const turns = await (await api(`/api/conversations/${id}`)).json();
+        const turns = await (await fetch(`/api/conversations/${id}`)).json();
         if (!turns.length) {
           showEmpty();
         }
@@ -1276,7 +1253,7 @@
         };
 
         try {
-          const res = await api('/api/chat', {
+          const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ conversationId, message, tz, effort: sentEffort }),

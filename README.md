@@ -38,7 +38,7 @@ npm run dev
 
 Open http://localhost:3000.
 
-If you're exposing it beyond localhost, set `AGENT_API_TOKEN` first. Every `/api` route then needs it as a Bearer token, and the page asks for it once.
+The server only listens on 127.0.0.1, so nothing else on your network can use it.
 
 ## Using it
 
@@ -75,7 +75,7 @@ Tests never touch the network. The model and search are passed in as functions, 
 ## Layout
 
 ```
-src/server.ts    HTTP routes, SSE, auth gate, the MCP endpoint
+src/server.ts    HTTP routes, SSE, the MCP endpoint
 src/agent.ts     runTurn(): one chat turn, start to finish
 src/llm.ts       spawns `claude -p`, parses its stream, serves MCP
 src/tools.ts     web_search (searches and page reads) against Exa

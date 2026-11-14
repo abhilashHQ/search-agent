@@ -31,7 +31,6 @@ CLAUDE_MODEL=claude-opus-5-5
 CLAUDE_EFFORT=low            # default when the UI doesn't send one
 CLAUDE_CONFIG_DIR=           # defaults to data/claude-config, never the user's ~/.claude
 CLAUDE_BIN=                  # optional, a different claude binary
-AGENT_API_TOKEN=             # when set, /api/* needs it as a Bearer token
 PORT=3000
 DB_PATH=data/meowgle.db
 ```
@@ -41,7 +40,7 @@ Only the credential in use is passed to the CLI: in `-p` mode it prefers `ANTHRO
 ## File layout
 
 ```
-src/server.ts    HTTP routes, SSE, static file, request validation, bearer gate, MCP route
+src/server.ts    HTTP routes, SSE, static file, request validation, MCP route
 src/agent.ts     runTurn(): builds the prompt, runs the model, serves its tool calls, yields events, persists
 src/llm.ts       makeClaude(): spawns `claude -p`, parses stream-json; handleMcp(): the MCP endpoint
 src/tools.ts     the web_search schema + webSearch() + openPage() against Exa
@@ -230,7 +229,7 @@ Timezone: everything is stored in UTC and rendered in the request's `tz`. If `tz
 - The answer streams in as markdown. Keep the renderer tiny and inline: paragraphs, lists, bold, links, code.
 - `[n]` renders as a small clickable superscript. A sources row under the answer shows favicon, domain and title.
 - Sends `tz` from `Intl.DateTimeFormat().resolvedOptions().timeZone`.
-- Every `/api` call carries `Authorization: Bearer <token>` from localStorage. On a 401 the page prompts for the token once and retries.
+- No auth. The server listens on 127.0.0.1 only, and `POST /api/chat` requires `content-type: application/json`, so another site open in the browser can't trigger turns without a CORS preflight, which the server never answers.
 
 ## Tests (`node:test`, no network)
 
@@ -255,7 +254,7 @@ Claude Code 2.1.322, 13 Nov 2026:
 
 Reviewers clone the repo and run it on their own Claude access: `npm install`, copy `.env.example` to `.env`, set `CLAUDE_CODE_OAUTH_TOKEN` (their subscription) or `ANTHROPIC_API_KEY`, plus `EXA_API_KEY`, then `npm run dev`.
 
-There is no hosted demo on the owner's subscription. Anthropic's Claude Code terms don't allow routing other people's requests through Pro/Max credentials. A hosted demo would need an API key with a spend cap, `AGENT_API_TOKEN` as a shared password, and server-side caps on concurrency, daily turns and effort.
+There is no hosted demo on the owner's subscription. Anthropic's Claude Code terms don't allow routing other people's requests through Pro/Max credentials. A hosted demo would need an API key with a spend cap, a shared password in front of `/api`, and server-side caps on concurrency, daily turns and effort.
 
 ## Deferred
 
